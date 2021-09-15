@@ -20,16 +20,9 @@
 
 #include "NimBLECharacteristic.h"
 #include "NimBLEUUID.h"
+#include "NimBLEAttValue.h"
 
 #include <string>
-
-
-typedef struct
-{
-    uint16_t attr_max_len;  /*!<  attribute max value length */
-    uint16_t attr_len;      /*!<  attribute current value length */
-    uint8_t  *attr_value;    /*!<  the pointer to attribute value */
-} attr_value_t;
 
 class NimBLEService;
 class NimBLECharacteristic;
@@ -58,12 +51,29 @@ public:
     void                  setCallbacks(NimBLEDescriptorCallbacks* pCallbacks);
 
     size_t                getLength();
-    uint8_t*              getValue();
+    NimBLEAttValue        getValue(time_t *timestamp = nullptr);
     std::string           getStringValue();
 
     void                  setValue(const uint8_t* data, size_t size);
     void                  setValue(const std::string &value);
     NimBLECharacteristic* getCharacteristic();
+
+    /**
+     * @brief A template to convert the characteristic data to <type\>.
+     * @tparam T The type to convert the data to.
+     * @param [in] timestamp A pointer to a time_t struct to store the time the value was read.
+     * @param [in] skipSizeCheck If true it will skip checking if the data size is less than <tt>sizeof(<type\>)</tt>.
+     * @return The data converted to <type\> or NULL if skipSizeCheck is false and the data is
+     * less than <tt>sizeof(<type\>)</tt>.
+     * @details <b>Use:</b> <tt>getValue<type>(&timestamp, skipSizeCheck);</tt>
+     */
+    template<typename T>
+    T   getValue(time_t *timestamp = nullptr, bool skipSizeCheck = false) {
+            if(!skipSizeCheck && m_value.getLength() < sizeof(T)) {
+                return T();
+            }
+            return *((T *)m_value.getValue(timestamp));
+    }
 
     /**
      * @brief Convenience template to set the descriptor value to <type\>val.
@@ -89,7 +99,7 @@ private:
     NimBLEDescriptorCallbacks* m_pCallbacks;
     NimBLECharacteristic*      m_pCharacteristic;
     uint8_t                    m_properties;
-    attr_value_t               m_value;
+    NimBLEAttValue             m_value;
     uint8_t                    m_removed;
 }; // NimBLEDescriptor
 

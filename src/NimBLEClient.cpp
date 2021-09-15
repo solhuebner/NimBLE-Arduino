@@ -740,11 +740,11 @@ int NimBLEClient::serviceDiscoveredCB(
  * @param [in] characteristicUUID The characteristic whose value we wish to read.
  * @returns characteristic value or an empty string if not found
  */
-std::string NimBLEClient::getValue(const NimBLEUUID &serviceUUID, const NimBLEUUID &characteristicUUID) {
+NimBLEAttValue NimBLEClient::getValue(const NimBLEUUID &serviceUUID, const NimBLEUUID &characteristicUUID) {
     NIMBLE_LOGD(LOG_TAG, ">> getValue: serviceUUID: %s, characteristicUUID: %s",
                          serviceUUID.toString().c_str(), characteristicUUID.toString().c_str());
 
-    std::string ret = "";
+    NimBLEAttValue ret;
     NimBLERemoteService* pService = getService(serviceUUID);
 
     if(pService != nullptr) {
@@ -768,7 +768,7 @@ std::string NimBLEClient::getValue(const NimBLEUUID &serviceUUID, const NimBLEUU
  * @returns true if successful otherwise false
  */
 bool NimBLEClient::setValue(const NimBLEUUID &serviceUUID, const NimBLEUUID &characteristicUUID,
-                            const std::string &value, bool response)
+                            const NimBLEAttValue &value, bool response)
 {
     NIMBLE_LOGD(LOG_TAG, ">> setValue: serviceUUID: %s, characteristicUUID: %s",
                          serviceUUID.toString().c_str(), characteristicUUID.toString().c_str());
@@ -829,7 +829,7 @@ uint16_t NimBLEClient::getMTU() {
  * @param [in] arg A pointer to the client instance that registered for this callback.
  */
  /*STATIC*/
- int NimBLEClient::handleGapEvent(struct ble_gap_event *event, void *arg) {
+int NimBLEClient::handleGapEvent(struct ble_gap_event *event, void *arg) {
     NimBLEClient* client = (NimBLEClient*)arg;
     int rc;
 
@@ -947,11 +947,8 @@ uint16_t NimBLEClient::getMTU() {
                     NIMBLE_LOGD(LOG_TAG, "Got Notification for characteristic %s",
                                 (*characteristic)->toString().c_str());
 
-                    time_t t = time(nullptr);
                     ble_npl_hw_enter_critical();
-                    (*characteristic)->m_value = std::string((char *)event->notify_rx.om->om_data,
-                                                             event->notify_rx.om->om_len);
-                    (*characteristic)->m_timestamp = t;
+                    (*characteristic)->m_value.setValue(event->notify_rx.om->om_data, event->notify_rx.om->om_len);
                     ble_npl_hw_exit_critical(0);
 
                     if ((*characteristic)->m_notifyCallback != nullptr) {

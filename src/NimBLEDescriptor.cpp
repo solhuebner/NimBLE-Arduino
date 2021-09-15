@@ -31,8 +31,8 @@ static NimBLEDescriptorCallbacks defaultCallbacks;
  * @brief NimBLEDescriptor constructor.
  */
 NimBLEDescriptor::NimBLEDescriptor(const char* uuid, uint16_t properties, uint16_t max_len,
-                                    NimBLECharacteristic* pCharacteristic)
-: NimBLEDescriptor(NimBLEUUID(uuid), max_len, properties, pCharacteristic) {
+                                   NimBLECharacteristic* pCharacteristic)
+: NimBLEDescriptor(NimBLEUUID(uuid), properties, max_len, pCharacteristic) {
 }
 
 
@@ -41,14 +41,11 @@ NimBLEDescriptor::NimBLEDescriptor(const char* uuid, uint16_t properties, uint16
  */
 NimBLEDescriptor::NimBLEDescriptor(NimBLEUUID uuid, uint16_t properties, uint16_t max_len,
                                     NimBLECharacteristic* pCharacteristic)
-{
+:   m_value(NIMBLE_ATT_INIT_LENGTH > max_len ? max_len : NIMBLE_ATT_INIT_LENGTH, max_len) {
     m_uuid               = uuid;
-    m_value.attr_len     = 0;                           // Initial length is 0.
-    m_value.attr_max_len = max_len;                     // Maximum length of the data.
     m_handle             = NULL_HANDLE;                 // Handle is initially unknown.
     m_pCharacteristic    = pCharacteristic;
     m_pCallbacks         = &defaultCallbacks;           // No initial callback.
-    m_value.attr_value   = (uint8_t*) calloc(max_len,1);  // Allocate storage for the value.
     m_properties         = 0;
     m_removed            = 0;
 
@@ -84,7 +81,6 @@ NimBLEDescriptor::NimBLEDescriptor(NimBLEUUID uuid, uint16_t properties, uint16_
  * @brief NimBLEDescriptor destructor.
  */
 NimBLEDescriptor::~NimBLEDescriptor() {
-    free(m_value.attr_value);   // Release the storage we created in the constructor.
 } // ~NimBLEDescriptor
 
 /**
@@ -101,7 +97,7 @@ uint16_t NimBLEDescriptor::getHandle() {
  * @return The length (in bytes) of the value of this descriptor.
  */
 size_t NimBLEDescriptor::getLength() {
-    return m_value.attr_len;
+    return m_value.getLength();
 } // getLength
 
 
@@ -115,10 +111,14 @@ NimBLEUUID NimBLEDescriptor::getUUID() {
 
 /**
  * @brief Get the value of this descriptor.
- * @return A pointer to the value of this descriptor.
+ * @return The NimBLEAttValue of this descriptor.
  */
-uint8_t* NimBLEDescriptor::getValue() {
-    return m_value.attr_value;
+NimBLEAttValue NimBLEDescriptor::getValue(time_t *timestamp) {
+    if (timestamp != nullptr) {
+        m_value.getValue(timestamp);
+    }
+
+    return m_value;
 } // getValue
 
 
@@ -127,7 +127,7 @@ uint8_t* NimBLEDescriptor::getValue() {
  * @return A std::string instance containing a copy of the descriptor's value.
  */
 std::string NimBLEDescriptor::getStringValue() {
-    return std::string((char *) m_value.attr_value, m_value.attr_len);
+    return std::string(m_value);
 }
 
 
@@ -169,17 +169,17 @@ int NimBLEDescriptor::handleGapEvent(uint16_t conn_handle, uint16_t attr_handle,
             }
 
             case BLE_GATT_ACCESS_OP_WRITE_DSC: {
-                if (ctxt->om->om_len > pDescriptor->m_value.attr_max_len) {
+                if (ctxt->om->om_len > pDescriptor->m_value.getMaxLength()) {
                     return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
                 }
 
-                uint8_t buf[pDescriptor->m_value.attr_max_len];
+                uint8_t buf[pDescriptor->m_value.getMaxLength()];
                 size_t len = ctxt->om->om_len;
                 memcpy(buf, ctxt->om->om_data,len);
                 os_mbuf *next;
                 next = SLIST_NEXT(ctxt->om, om_next);
                 while(next != NULL){
-                    if((len + next->om_len) > pDescriptor->m_value.attr_max_len) {
+                    if((len + next->om_len) > pDescriptor->m_value.getMaxLength()) {
                         return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
                     }
                     memcpy(&buf[len], next->om_data, next->om_len);
@@ -231,16 +231,7 @@ void NimBLEDescriptor::setHandle(uint16_t handle) {
  * @param [in] length The length of the data in bytes.
  */
 void NimBLEDescriptor::setValue(const uint8_t* data, size_t length) {
-    if (length > m_value.attr_max_len) {
-        NIMBLE_LOGE(LOG_TAG, "Size %d too large, must be no bigger than %d", length, m_value.attr_max_len);
-        return;
-    }
-
-    ble_npl_hw_enter_critical();
-    m_value.attr_len = length;
-    memcpy(m_value.attr_value, data, length);
-    ble_npl_hw_exit_critical(0);
-
+    m_value.setValue(data, length);
 } // setValue
 
 

@@ -30,26 +30,29 @@ static const char* LOG_TAG = "NimBLECharacteristic";
  * @brief Construct a characteristic
  * @param [in] uuid - UUID (const char*) for the characteristic.
  * @param [in] properties - Properties for the characteristic.
+ * @param [in] max_len - The maximum length in bytes that the characteristic value can hold. (Default: 512 bytes for esp32, 20 for all others).
  * @param [in] pService - pointer to the service instance this characteristic belongs to.
  */
-NimBLECharacteristic::NimBLECharacteristic(const char* uuid, uint16_t properties, NimBLEService* pService)
-: NimBLECharacteristic(NimBLEUUID(uuid), properties, pService) {
+NimBLECharacteristic::NimBLECharacteristic(const char* uuid, uint16_t properties,
+                                           uint16_t max_len, NimBLEService* pService)
+: NimBLECharacteristic(NimBLEUUID(uuid), properties, max_len, pService) {
 }
 
 /**
  * @brief Construct a characteristic
  * @param [in] uuid - UUID for the characteristic.
  * @param [in] properties - Properties for the characteristic.
+ * @param [in] max_len - The maximum length in bytes that the characteristic value can hold. (Default: 512 bytes for esp32, 20 for all others).
  * @param [in] pService - pointer to the service instance this characteristic belongs to.
  */
-NimBLECharacteristic::NimBLECharacteristic(const NimBLEUUID &uuid, uint16_t properties, NimBLEService* pService) {
+NimBLECharacteristic::NimBLECharacteristic(const NimBLEUUID &uuid, uint16_t properties,
+                                           uint16_t max_len, NimBLEService* pService)
+:   m_value(NIMBLE_ATT_INIT_LENGTH > max_len ? max_len : NIMBLE_ATT_INIT_LENGTH, max_len) {
     m_uuid        = uuid;
     m_handle      = NULL_HANDLE;
     m_properties  = properties;
     m_pCallbacks  = &defaultCallback;
     m_pService    = pService;
-    m_value       = "";
-    m_timestamp   = 0;
     m_removed     = 0;
 } // NimBLECharacteristic
 
@@ -231,17 +234,14 @@ NimBLEUUID NimBLECharacteristic::getUUID() {
 
 /**
  * @brief Retrieve the current value of the characteristic.
- * @return A std::string containing the current characteristic value.
+ * @return The NimBLEAttValue containing the current characteristic value.
  */
-std::string NimBLECharacteristic::getValue(time_t *timestamp) {
-    ble_npl_hw_enter_critical();
-    std::string retVal = m_value;
+NimBLEAttValue NimBLECharacteristic::getValue(time_t *timestamp) {
     if(timestamp != nullptr) {
-        *timestamp = m_timestamp;
+        m_value.getValue(timestamp);
     }
-    ble_npl_hw_exit_critical(0);
 
-    return retVal;
+    return m_value;
 } // getValue
 
 
@@ -250,10 +250,7 @@ std::string NimBLECharacteristic::getValue(time_t *timestamp) {
  * @return The length of the current characteristic data.
  */
 size_t NimBLECharacteristic::getDataLength() {
-    ble_npl_hw_enter_critical();
-    size_t len = m_value.length();
-    ble_npl_hw_exit_critical(0);
-    return len;
+    return m_value.getLength();
 }
 
 
@@ -286,25 +283,25 @@ int NimBLECharacteristic::handleGapEvent(uint16_t conn_handle, uint16_t attr_han
                 }
 
                 ble_npl_hw_enter_critical();
-                rc = os_mbuf_append(ctxt->om, (uint8_t*)pCharacteristic->m_value.data(),
-                                    pCharacteristic->m_value.length());
+                rc = os_mbuf_append(ctxt->om, pCharacteristic->m_value.getValue(),
+                                    pCharacteristic->m_value.getLength());
                 ble_npl_hw_exit_critical(0);
                 return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
             }
 
             case BLE_GATT_ACCESS_OP_WRITE_CHR: {
-                if (ctxt->om->om_len > BLE_ATT_ATTR_MAX_LEN) {
+                if (ctxt->om->om_len > pCharacteristic->m_value.getMaxLength()) {
                     return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
                 }
 
-                uint8_t buf[BLE_ATT_ATTR_MAX_LEN];
+                uint8_t buf[pCharacteristic->m_value.getMaxLength()];
                 size_t len = ctxt->om->om_len;
                 memcpy(buf, ctxt->om->om_data,len);
 
                 os_mbuf *next;
                 next = SLIST_NEXT(ctxt->om, om_next);
                 while(next != NULL){
-                    if((len + next->om_len) > BLE_ATT_ATTR_MAX_LEN) {
+                    if((len + next->om_len) > pCharacteristic->m_value.getMaxLength()) {
                         return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
                     }
                     memcpy(&buf[len], next->om_data, next->om_len);
@@ -513,21 +510,12 @@ NimBLECharacteristicCallbacks* NimBLECharacteristic::getCallbacks() {
 void NimBLECharacteristic::setValue(const uint8_t* data, size_t length) {
 #if CONFIG_LOG_DEFAULT_LEVEL > 3 || (ARDUINO_ARCH_ESP32 && CORE_DEBUG_LEVEL >= 4)
     char* pHex = NimBLEUtils::buildHexData(nullptr, data, length);
-    NIMBLE_LOGD(LOG_TAG, ">> setValue: length=%d, data=%s, characteristic UUID=%s", length, pHex, getUUID().toString().c_str());
+    NIMBLE_LOGD(LOG_TAG, ">> setValue: length=%d, data=%s, characteristic UUID=%s",
+                length, pHex, getUUID().toString().c_str());
     free(pHex);
 #endif
 
-    if (length > BLE_ATT_ATTR_MAX_LEN) {
-        NIMBLE_LOGE(LOG_TAG, "Size %d too large, must be no bigger than %d", length, BLE_ATT_ATTR_MAX_LEN);
-        return;
-    }
-
-    time_t t = time(nullptr);
-    ble_npl_hw_enter_critical();
-    m_value = std::string((char*)data, length);
-    m_timestamp = t;
-    ble_npl_hw_exit_critical(0);
-
+    m_value.setValue(data, length);
     NIMBLE_LOGD(LOG_TAG, "<< setValue");
 } // setValue
 

@@ -228,3 +228,16 @@
 #define CONFIG_BT_NIMBLE_ROLE_BROADCASTER
 #endif
 
+#ifdef ESP_PLATFORM
+#define NIMBLE_DEFAULT_MAX_ATT_LEN BLE_ATT_ATTR_MAX_LEN
+#else
+#define NIMBLE_DEFAULT_MAX_ATT_LEN 20
+#endif
+
+#define NIMBLE_ATT_INIT_LENGTH 20
+
+#if defined __has_include
+#  if __has_include (<Arduino.h>)
+#    define NIMBLE_ARDUINO_AVAILABLE
+#  endif
+#endif

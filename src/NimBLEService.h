@@ -50,12 +50,14 @@ public:
     NimBLECharacteristic* createCharacteristic(const char* uuid,
                                               uint32_t properties =
                                               NIMBLE_PROPERTY::READ |
-                                              NIMBLE_PROPERTY::WRITE);
+                                              NIMBLE_PROPERTY::WRITE,
+                                              uint16_t max_len = NIMBLE_DEFAULT_MAX_ATT_LEN);
 
     NimBLECharacteristic* createCharacteristic(const NimBLEUUID &uuid,
                                                uint32_t properties =
                                                NIMBLE_PROPERTY::READ |
-                                               NIMBLE_PROPERTY::WRITE);
+                                               NIMBLE_PROPERTY::WRITE,
+                                               uint16_t max_len = NIMBLE_DEFAULT_MAX_ATT_LEN);
 
     void                  addCharacteristic(NimBLECharacteristic* pCharacteristic);
     void                  removeCharacteristic(NimBLECharacteristic* pCharacteristic, bool deleteChr = false);
